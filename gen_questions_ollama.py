@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-"""
-gen_questions_ollama.py — Draft question generation from passages using LLaMA via Ollama.
-"""
 
 import argparse
 import json
