@@ -123,7 +123,7 @@ def _extract_yesno(sentence: str, question: Optional[str] = None) -> Optional[st
     s = _norm(sentence)
     q = _norm(question or "")
 
-    # Special handling for correlation/association questions
+    # special handling for correlation/association questions
     if "correlat" in q or "associat" in q:
         # explicit negatives around the keyword
         if re.search(r"\bno\s+(?:significant\s+)?(correlation|association)\b", s):
@@ -135,7 +135,7 @@ def _extract_yesno(sentence: str, question: Optional[str] = None) -> Optional[st
             return "Yes"
         return None  # neither observed
 
-    # Generic yes/no (keep broad, but don't let stray 'no' elsewhere dominate)
+    # generic yes/no (keep broad, but don't let stray 'no' elsewhere dominate)
     # If the question is yes/no but not correlation-specific, prefer explicit negations of the predicate
     if re.search(r"\b(not\s+|no\s+)(evidence|effect|difference|increase|decrease|benefit|protect\w*|detect\w*|present)\b", s):
         return "No"
@@ -271,7 +271,7 @@ def main():
 
     cfg = GenConfig(model=args.model)
 
-    # Pre-count for progress
+    # pre-count for progress
     try:
         total = sum(1 for _ in open(args.inp, "r", encoding="utf-8"))
     except Exception:
@@ -323,7 +323,7 @@ def main():
                 answer = ""
                 evidence = ""
 
-            # === Our independent validator & extractor ===
+            # Validator
             ctx_text = "\n".join([c.get("passage", "") for c in contexts])
 
             # If model didn't provide evidence or answer, try to find a best sentence
@@ -382,10 +382,8 @@ def main():
             }
             fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
-            # ---- print progress ----
             print(f"[progress] {processed}/{total or '?'}", end="\r")
 
-            # ---- checkpoint save ----
             if processed % 10 == 0:
                 fout.flush()
                 os.fsync(fout.fileno())
