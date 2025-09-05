@@ -193,29 +193,27 @@ def _extract_which(sentence: str) -> Optional[str]:
 
 def _extract_answer(question: str, sentence: str) -> Optional[str]:
     qtype = _question_type(question)
-    if qtype == "yesno":
-        return _extract_yesno(sentence, question)
+    # NOTE: intentionally DO NOT handle yes/no here.
     if qtype == "age":
         return _extract_age(sentence)
     if qtype == "method":
         return _extract_method(sentence)
     if qtype == "which":
         return _extract_which(sentence)
-    # fallback: short snippet
+    # fallback: short snippet from the evidence sentence
     snippet = sentence.strip()
     if len(snippet) > 180:
         snippet = snippet[:177] + "..."
     return snippet or None
 
 
-# -----------------------------------------------------------------------------
 
 
 @dataclass
 class GenConfig:
     model: str
     endpoint: str = DEFAULT_ENDPOINT
-    temperature: float = 0.2  # a bit lower to reduce randomness
+    temperature: float = 0.2 #reduce randomness
     top_p: float = 0.9
     num_ctx: int = 8192
     seed: Optional[int] = None
@@ -289,7 +287,7 @@ def main():
             question = obj.get("question", "")
             contexts = obj.get("contexts", [])[:args.maxctx]
 
-            # Build contexts string; truncate per passage
+            # build contexts string; truncate per passage
             ctx_lines = []
             used_ids_default = []
             for c in contexts:
@@ -321,27 +319,27 @@ def main():
                 answer = ""
                 evidence = ""
 
-            # Validator
+            # validator
             ctx_text = "\n".join([c.get("passage", "") for c in contexts])
 
-            # If model didn't provide evidence or answer, try to find a best sentence
+            # if model didn't provide evidence or answer, try to find a best sentence
             best_sentence = _best_support_sentence(ctx_text, grounded or question, min_overlap=1)
 
-            # Decide answerable:
+            # decide answerable:
             answerable = answerable_model
             flipped = False
 
             if not answerable_model:
-                # Try to salvage: if we found a decent support sentence, mark answerable
+                # try to salvage: if we found a decent support sentence, mark answerable
                 if best_sentence:
                     answerable = True
                     flipped = True
 
-            # Ensure evidence exists if answerable
+            # ensure evidence exists if answerable
             if answerable and (not evidence):
                 evidence = best_sentence or ""
 
-            # Ensure answer exists if answerable
+            # ensure answer exists if answerable
             if answerable and not answer:
                 if evidence:
                     extracted = _extract_answer(grounded or question, evidence)
@@ -349,11 +347,18 @@ def main():
                     extracted = None
                 answer = extracted or (evidence[:177] + "..." if evidence and len(evidence) > 180 else (evidence or ""))
 
-            # If still nothing usable, mark unanswerable
+            #forbid bare Yes/No answers — replace with an evidence snippet
+            if answerable and re.fullmatch(r"\s*(yes|no)\s*", (answer or ""), flags=re.IGNORECASE):
+              repl = (evidence or "").strip()
+              if len(repl) > 180:
+                repl = repl[:177] + "..."
+              answer = repl
+
+            # if still nothing usable, mark unanswerable
             if answerable and (not evidence or not answer):
                 answerable = False
 
-            # Build rationale if empty
+            # build rationale if empty
             if not rationale:
                 used_ids_str = ", ".join(str(i) for i in (used_doc_ids or []))
                 if answerable:
