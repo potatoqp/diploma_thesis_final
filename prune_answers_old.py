@@ -45,7 +45,7 @@ PASSAGE (optional, may duplicate EVIDENCE):
 Return JSON now.
 """
 
-#helpers 
+# ---------------- helpers ----------------
 
 def _norm(s: str) -> str:
     s = (s or "").lower()
@@ -172,99 +172,28 @@ def _shorten_to_phrase(sent: str, max_chars: int) -> str:
     s = (sent or "").strip()
     if len(s) <= max_chars:
         return s
+    # punctuation breakpoints
     cut = max(s.rfind(". ", 0, max_chars), s.rfind("; ", 0, max_chars), s.rfind(", ", 0, max_chars), s.rfind(" — ", 0, max_chars))
     if cut > 40:
         return s[:cut].rstrip()
+    # word boundary
     cut = s.rfind(" ", 0, max_chars)
     if cut > 40:
         return s[:cut].rstrip()
+    # last resort: regex word boundary
     m = re.match(r"^(.{0,%d})(?:\b|$)" % (max_chars-1), s)
     return (m.group(1) if m else s[:max_chars-1]).rstrip()
 
-def _normalize_spaces(s: str) -> str:
-    return re.sub(r"\s+", " ", (s or "")).strip()
-
-#prefix detection helpers 
-
-def _raw_prefix_clip(text: str, max_chars: int) -> str:
-    """Exact naive prefix: first max_chars-3 chars + '...' (no trimming)."""
-    if not text:
-        return ""
-    t = text.strip()
-    if len(t) <= max_chars:
-        return t
-    return t[:max_chars - 3] + "..."
-
-def _has_punctuation_before_cap(text: str, max_chars: int) -> bool:
-    """
-    True if a natural boundary (.[!?;,:]) exists near the end of the kept window,
-    meaning we *could* stop earlier without a dumb prefix cut.
-    """
-    if not text or len(text) <= max_chars:
-        return False
-    window = text[:max_chars - 3]
-    return bool(re.search(r"[\.!?;,:]\s*[^\s]*$", window[-30:]))
-
-def _is_bare_prefix(ans: str, source: str, max_chars: int) -> bool:
-    """
-    Flags cases where `ans` is the *start* of source (no ellipsis) and likely truncated:
-      - source starts with ans (normalized-space compare),
-      - answer is near the cap (>= 85% of cap or within 8 chars),
-      - AND (no terminal punctuation) OR (ends mid-word),
-      - AND there wasn't an earlier punctuation boundary in the kept window.
-    """
-    if not ans or not source:
-        return False
-    a = _normalize_spaces(ans)
-    s = _normalize_spaces(source)
-    if not s.startswith(a):
-        return False
-    if len(a) < 20:
-        return False  # avoid flagging tiny snippets
-    near_cap = (len(ans) >= int(0.85 * max_chars)) or (max_chars - len(ans) <= 8)
-    no_terminal = not re.search(r"[.!?]\s*$", ans)
-    # mid-word cut if both last char of ans and next char in source are alnum
-    next_char = s[len(a):len(a)+1]
-    prev_char = a[-1:] if a else ""
-    midword = bool(prev_char and prev_char[-1].isalnum() and next_char and next_char.isalnum())
-    if near_cap and (no_terminal or midword) and not _has_punctuation_before_cap(source, max_chars):
-        return True
-    return False
-
-def _is_prefix_clip_answer(ans: str, evidence: str, contexts: List[Dict[str, Any]], max_chars: int) -> bool:
-    """
-    True iff ans:
-      - equals the raw prefix clip (with ... or …) of evidence/passage with no earlier punctuation boundary, OR
-      - is a bare, near-cap prefix of the evidence/passage that ends mid-word or lacks terminal punctuation.
-    """
+def _looks_like_cap_clip(ans: str, max_chars: int) -> bool:
     if not ans:
         return False
-
-    norm_ans = _normalize_spaces(ans)
-
-    def _match_source(src: str) -> bool:
-        if not src:
-            return False
-        # Exact naive "..." prefix
-        raw = _raw_prefix_clip(src, max_chars)
-        if _normalize_spaces(raw) == norm_ans and not _has_punctuation_before_cap(src, max_chars):
-            return True
-        # Single ellipsis char variation
-        if raw.endswith("...") and norm_ans == _normalize_spaces(raw[:-3] + "…") and not _has_punctuation_before_cap(src, max_chars):
-            return True
-        # Bare prefix (no ellipsis) near cap / mid-word
-        if _is_bare_prefix(ans, src, max_chars):
-            return True
-        return False
-
-    if evidence and _match_source(evidence):
-        return True
-    for c in (contexts or []):
-        if _match_source((c.get("passage", "") or "")):
+    # exactly at or near cap, and looks truncated
+    if len(ans) >= max_chars - 1:
+        if ans.endswith("...") or ans.endswith("…") or "…[truncated]" in ans:
             return True
     return False
 
-#llm plumbing
+# ------------- LLM plumbing -------------
 
 @dataclass
 class GenConfig:
@@ -302,7 +231,7 @@ def parse_loose_json(raw: str) -> dict:
             return json.loads(raw[start:end+1])
         raise
 
-#pruning core 
+# ------------- pruning core -------------
 
 def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars: int) -> Dict[str, Any]:
     answerable = bool(rec.get("answerable", True))
@@ -311,64 +240,11 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
     evidence = rec.get("evidence", "") or ""
     contexts = rec.get("contexts", []) or []
 
-    #if already unanswerable, pass through
-    if not answerable:
+    # pass-through for already unanswerable or short non-clipped answers
+    if not answerable or (len(answer) <= max_chars and not _looks_like_cap_clip(answer, max_chars)):
         return rec
 
-    #attempt to salvage a clean phrase from best sentence
-    def _salvage_from_best(current_rationale_suffix: str) -> Dict[str, Any]:
-        # Build verify text
-        verify_pool = []
-        if evidence:
-            verify_pool.append(evidence)
-        for c in contexts:
-            verify_pool.append(c.get("passage", "") or "")
-        verify_text = "\n".join(verify_pool)
-
-        def supported(text: str) -> bool:
-            if not text:
-                return False
-            tnorm = _norm(text)
-            if _contains_norm(verify_text, tnorm) or _contains_norm(evidence, tnorm):
-                return True
-            tt = _token_set(text)
-            if not tt:
-                return False
-            for sent in _sentences(verify_text):
-                st = _token_set(sent)
-                if not st:
-                    continue
-                j = len(tt & st) / max(1, len(tt | st))
-                if j >= 0.7:
-                    return True
-            return False
-
-        pool_text = evidence if evidence else verify_text
-        best_sentence = _best_support_sentence(pool_text, grounded_q, min_overlap=1)
-        if best_sentence:
-            phrase = _shorten_to_phrase(best_sentence, max_chars).strip()
-            if phrase and phrase != rec.get("answer","") and supported(phrase) and not _is_prefix_clip_answer(phrase, evidence, contexts, max_chars):
-                rec["answer"] = phrase
-                rec["evidence"] = best_sentence
-                rec["rationale"] = (rec.get("rationale") or "") + f" {current_rationale_suffix}"
-                rec["answerable"] = True
-                return rec
-
-        # No salvage → flip to unanswerable
-        rec["answer"] = ""
-        rec["answerable"] = False
-        rec["rationale"] = (rec.get("rationale") or "") + " [prefix-clip→unanswerable]"
-        return rec
-
-    # If the current answer is a prefix-clip of evidence/passage, try to salvage before flipping
-    if _is_prefix_clip_answer(answer, evidence, contexts, max_chars):
-        return _salvage_from_best("[prefix-salvaged]")
-
-    # If the answer is short and not a prefix-stub, nothing to do
-    if len(answer) <= max_chars:
-        return rec
-
-    # compact passages for LLM context
+    # compact passage for the LLM
     compact_passage = ""
     if contexts:
         chunks = []
@@ -403,7 +279,7 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
     except Exception as e:
         prune_rationale = f"PRUNE_FALLBACK: {type(e).__name__}: {e}"
 
-    #build verify text
+    # build verify text
     verify_pool = []
     if evidence:
         verify_pool.append(evidence)
@@ -411,7 +287,7 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
         verify_pool.append(c.get("passage", "") or "")
     verify_text = "\n".join(verify_pool)
 
-    #support check
+    # support check: exact-in-normalized OR sentence-level token Jaccard
     def supported(text: str) -> bool:
         if not text:
             return False
@@ -436,8 +312,11 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
         rec["evidence"] = used_quote if supported(used_quote) else (evidence or used_quote)
         rec["rationale"] = (rec.get("rationale") or "") + f" [pruned:{len(answer)}→{len(pruned_answer)}]"
         rec["answerable"] = True
-        if _is_prefix_clip_answer(rec["answer"], evidence, contexts, max_chars):
-            return _salvage_from_best("[prefix-salvaged]")
+        # hard-clip guard
+        if _looks_like_cap_clip(rec["answer"], max_chars):
+            rec["answer"] = ""
+            rec["answerable"] = False
+            rec["rationale"] += " [cap_hit_flip]"
         return rec
 
     # deterministic fallback: best sentence → extract / shorten
@@ -450,8 +329,10 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
         rec["evidence"] = best_sentence or evidence
         rec["rationale"] = (rec.get("rationale") or "") + f" [pruned_fallback:{len(answer)}→{len(fallback_ans)}]"
         rec["answerable"] = True
-        if _is_prefix_clip_answer(rec["answer"], evidence, contexts, max_chars):
-            return _salvage_from_best("[prefix-salvaged]")
+        if _looks_like_cap_clip(rec["answer"], max_chars):
+            rec["answer"] = ""
+            rec["answerable"] = False
+            rec["rationale"] += " [cap_hit_flip]"
         return rec
 
     if best_sentence:
@@ -461,8 +342,10 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
             rec["evidence"] = best_sentence
             rec["rationale"] = (rec.get("rationale") or "") + " [pruned_phrase]"
             rec["answerable"] = True
-            if _is_prefix_clip_answer(rec["answer"], evidence, contexts, max_chars):
-                return _salvage_from_best("[prefix-salvaged]")
+            if _looks_like_cap_clip(rec["answer"], max_chars):
+                rec["answer"] = ""
+                rec["answerable"] = False
+                rec["rationale"] += " [cap_hit_flip]"
             return rec
 
     # evidence clipping path (word-safe)
@@ -478,8 +361,10 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
             rec["evidence"] = evidence
             rec["rationale"] = (rec.get("rationale") or "") + f" [pruned_clip:{len(answer)}→{len(s)}]"
             rec["answerable"] = True
-            if _is_prefix_clip_answer(rec["answer"], evidence, contexts, max_chars):
-                return _salvage_from_best("[prefix-salvaged]")
+            if _looks_like_cap_clip(rec["answer"], max_chars):
+                rec["answer"] = ""
+                rec["answerable"] = False
+                rec["rationale"] += " [cap_hit_flip]"
             return rec
 
     # fail: flip to unanswerable
@@ -488,6 +373,7 @@ def prune_one(rec: Dict[str, Any], cfg: GenConfig, max_chars: int, ctx_max_chars
     rec["rationale"] = (rec.get("rationale") or "") + " [pruner: could not find faithful concise span]"
     return rec
 
+# ---------------- main ----------------
 
 def main():
     ap = argparse.ArgumentParser()
@@ -521,12 +407,11 @@ def main():
             rec = json.loads(line)
 
             before_ans = rec.get("answer","") or ""
+            before_len = len(before_ans)
             before_flag = bool(rec.get("answerable", True))
 
-            needs_prune = before_flag and (
-                len(before_ans) > args.max_chars or
-                _is_prefix_clip_answer(before_ans, rec.get("evidence","") or "", rec.get("contexts",[]) or [], args.max_chars)
-            )
+            # >>> key fix: also prune if it LOOKS clipped at the cap <<<
+            needs_prune = before_flag and (before_len > args.max_chars or _looks_like_cap_clip(before_ans, args.max_chars))
 
             if needs_prune:
                 rec = prune_one(rec, cfg, args.max_chars, args.ctx_max_chars)
@@ -551,7 +436,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-

@@ -1,3 +1,4 @@
+
 import argparse
 import json
 import os
@@ -205,6 +206,26 @@ def _extract_answer(question: str, sentence: str) -> Optional[str]:
         snippet = snippet[:177] + "..."
     return snippet or None
 
+def _wordsafe_clip(text: str, max_chars: int) -> str:
+    s = (text or "").strip()
+    if len(s) <= max_chars:
+        return s
+    # prefer punctuation breakpoints
+    cut = max(s.rfind(". ", 0, max_chars),
+              s.rfind("; ", 0, max_chars),
+              s.rfind(", ", 0, max_chars),
+              s.rfind(" — ", 0, max_chars),
+              s.rfind(" – ", 0, max_chars))
+    if cut > 40:
+        return s[:cut].rstrip() + "..."
+    # next: last word boundary
+    cut = s.rfind(" ", 0, max_chars)
+    if cut > 40:
+        return s[:cut].rstrip() + "..."
+    # last resort: hard clip
+    return s[:max_chars-3].rstrip() + "..."
+
+
 
 
 
@@ -286,7 +307,7 @@ def main():
             question = obj.get("question", "")
             contexts = obj.get("contexts", [])[:args.maxctx]
 
-            # build contexts string; truncate per passage
+            # Build contexts string; truncate per passage
             ctx_lines = []
             used_ids_default = []
             for c in contexts:
@@ -307,8 +328,8 @@ def main():
                 rationale = data.get("rationale", "")
                 used_doc_ids = data.get("used_doc_ids", used_ids_default)
                 answerable_model = bool(data.get("answerable", True))
-                answer = data.get("answer", "")
-                evidence = data.get("evidence", "")
+                answer = (data.get("answer") or "")
+                evidence = (data.get("evidence") or "")
 
             except Exception as e:
                 grounded = question
@@ -318,46 +339,46 @@ def main():
                 answer = ""
                 evidence = ""
 
-            # validator
+            # Validator over raw contexts
             ctx_text = "\n".join([c.get("passage", "") for c in contexts])
 
-            # if model didn't provide evidence or answer, try to find a best sentence
+            # Always compute our deterministic best supporting sentence
             best_sentence = _best_support_sentence(ctx_text, grounded or question, min_overlap=1)
 
-            # decide answerable:
+            # Decide answerable: start from model flag, salvage if we have a best sentence
             answerable = answerable_model
-            flipped = False
+            if not answerable_model and best_sentence:
+                answerable = True  # salvage
 
-            if not answerable_model:
-                # try to salvage: if we found a decent support sentence, mark answerable
+            # ----- FORCE EVIDENCE TO ONE SENTENCE -----
+            if answerable:
                 if best_sentence:
-                    answerable = True
-                    flipped = True
-
-            # ensure evidence exists if answerable
-            if answerable and (not evidence):
-                evidence = best_sentence or ""
-
-            # ensure answer exists if answerable
-            if answerable and not answer:
-                if evidence:
-                    extracted = _extract_answer(grounded or question, evidence)
+                    evidence = best_sentence
                 else:
-                    extracted = None
-                answer = extracted or (evidence[:177] + "..." if evidence and len(evidence) > 180 else (evidence or ""))
+                    # try to compress model-provided evidence to one best sentence
+                    if evidence:
+                        evidence = _best_support_sentence(evidence, grounded or question, min_overlap=1) or evidence
+                    # if still no usable sentence, we can't ground confidently
+                    if not evidence:
+                        answerable = False
 
-            #forbid bare Yes/No answers — replace with an evidence snippet
-            if answerable and re.fullmatch(r"\s*(yes|no)\s*", (answer or ""), flags=re.IGNORECASE):
-              repl = (evidence or "").strip()
-              if len(repl) > 180:
-                repl = repl[:177] + "..."
-              answer = repl
+            # ----- ENSURE ANSWER (FROM THE SINGLE SENTENCE), WORD-SAFE -----
+            if answerable:
+                if not answer:
+                    extracted = _extract_answer(grounded or question, evidence) if evidence else None
+                    if not extracted:
+                        extracted = evidence  # fall back to sentence itself
+                    answer = _wordsafe_clip(extracted, 180) if extracted else ""
 
-            # if still nothing usable, mark unanswerable
+                # Forbid bare Yes/No: replace with evidence snippet (word-safe)
+                if re.fullmatch(r"\s*(yes|no)\s*", (answer or ""), flags=re.IGNORECASE):
+                    answer = _wordsafe_clip((evidence or "").strip(), 180)
+
+            # If still nothing usable, mark unanswerable
             if answerable and (not evidence or not answer):
                 answerable = False
 
-            # build rationale if empty
+            # Build rationale if empty
             if not rationale:
                 used_ids_str = ", ".join(str(i) for i in (used_doc_ids or []))
                 if answerable:
@@ -366,8 +387,6 @@ def main():
                     rationale += ")"
                 else:
                     rationale = f"Marked unanswerable after validation on doc_id(s) [{used_ids_str}]"
-
-            
 
             rec = {
                 "source_id": obj.get("source_id"),
@@ -391,8 +410,8 @@ def main():
                 os.fsync(fout.fileno())
                 print(f"\n[checkpoint] saved after {processed}/{total or '?'}")
 
-
     print(f"[done] Wrote {args.out}")
 
 if __name__ == "__main__":
     main()
+
