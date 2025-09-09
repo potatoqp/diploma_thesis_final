@@ -14,4 +14,5 @@ python scripts/prune_answers.py --in data/processed/cf_grounded.jsonl --out data
 
 python scripts/salvage_unanswerable.py --in data/processed/cf_grounded_pruned.jsonl --passages data/raw/cf_passages.csv --out data/final/cf_grounded_pruned_salvaged.jsonl --model llama3.1 --max_chars 140 --topn 3 --checkpoint 10
 
+python test_scripts/salvage_unanswerablev4.py --in data/processed/cf_grounded_pruned.jsonl --passages data/raw/cf_passages.csv --out data/final/cf_grounded_pruned_salvagedv4.jsonl --max_chars 140 --topn 4 --checkpoint 10
 
