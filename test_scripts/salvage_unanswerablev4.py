@@ -1,5 +1,4 @@
-
-import argparse, json, re, sys, os, csv
+import argparse, json, re, sys, os, csv, math
 import pandas as pd
 import requests
 from datetime import datetime, timezone
@@ -10,13 +9,14 @@ DEFAULT_ENDPOINT = "http://localhost:11434/api/generate"
 SYSTEM_PROMPT = """You are a careful, citation-faithful answer extractor.
 You will receive:
 - A GROUNDED_QUESTION.
-- EVIDENCE_SENTENCES (from the *same* source passage).
+- EVIDENCE_SENTENCES drawn from the same source passage.
 
 Rules:
 - Answer ONLY if the EVIDENCE_SENTENCES explicitly contain the answer.
-- The answer must be a SHORT, DIRECT PHRASE (<= MAX_CHARS), preferably verbatim.
-- Do NOT answer with "Yes"/"No" or paraphrase beyond what's present.
-- If you cannot answer *strictly* from EVIDENCE_SENTENCES, return an EMPTY string.
+- Return the SHORTEST exact phrase (<= MAX_CHARS) that answers the question.
+- Prefer verbatim spans that literally occur in the evidence (copy-paste).
+- Avoid vague words alone (e.g., not just "approximately" without the number).
+- Do NOT answer Yes/No. If unclear or not present, return an EMPTY string.
 
 Return STRICT JSON with keys:
   extracted_answer (string),
@@ -35,7 +35,6 @@ EVIDENCE_SENTENCES:
 Return JSON now.
 """
 
-# text utils 
 
 WORD_RE = re.compile(r"[A-Za-z0-9']+")
 
@@ -61,7 +60,7 @@ def _hard_sentence_split(text: str):
     parts = re.split(r'(?<=[.!?])\s+|\n+', text)
     return [p.strip() for p in parts if p and p.strip()]
 
-def _window_slices(text: str, window_tokens=50, stride=25, max_slices=40):
+def _window_slices_by_tokens(text: str, window_tokens=50, stride=25, max_slices=60):
     toks = _tokens(text)
     if not toks:
         return []
@@ -77,17 +76,18 @@ def _window_slices(text: str, window_tokens=50, stride=25, max_slices=40):
         out.append(" ".join(toks[-window_tokens:]))
     return out
 
-def _sentences(text: str):
+def _sentences_or_windows(text: str, small_thresh=400, min_words=6,
+                          win_tok=50, stride=25, max_slices=60):
     hard = _hard_sentence_split(text)
-    needs_windows = (len(hard) <= 1) or any(len(h) > 400 for h in hard)
+    needs_windows = (len(hard) <= 1) or any(len(h) > small_thresh for h in hard)
     if not needs_windows:
         return hard
     hybrid = []
     for h in (hard or [text]):
-        if len(h) <= 400 and len(h.split()) >= 6:
+        if len(h) <= small_thresh and len(h.split()) >= min_words:
             hybrid.append(h.strip())
         else:
-            for w in _window_slices(h, window_tokens=50, stride=25, max_slices=40):
+            for w in _window_slices_by_tokens(h, window_tokens=win_tok, stride=stride, max_slices=max_slices):
                 hybrid.append(w)
     seen, dedup = set(), []
     for s in hybrid:
@@ -96,19 +96,6 @@ def _sentences(text: str):
             seen.add(n)
             dedup.append(s)
     return dedup
-
-def _rank_sentences_by_overlap(passage: str, question: str, topn: int):
-    qtok = set(_key_tokens(question))
-    if not qtok:
-        return []
-    scored = []
-    for s in _sentences(passage):
-        stok = set(_key_tokens(s))
-        score = len(qtok & stok)
-        if score > 0:
-            scored.append((score, s))
-    scored.sort(key=lambda x: (-x[0], len(x[1])))
-    return [s for _, s in scored[:topn]]
 
 def _shorten_wordsafe(s: str, max_chars: int) -> str:
     s = (s or "").strip()
@@ -127,23 +114,6 @@ def _shorten_wordsafe(s: str, max_chars: int) -> str:
     m = re.match(r"^(.{0,%d})(?:\b|$)" % (max_chars-1), s)
     return (m.group(1) if m else s[:max_chars-1]).rstrip()
 
-def _supported(span: str, source_text: str) -> bool:
-    if not span or not source_text:
-        return False
-    if _norm(span) in _norm(source_text):
-        return True
-    tt = set(_key_tokens(span))
-    if not tt:
-        return False
-    for s in _sentences(source_text):
-        st = set(_key_tokens(s))
-        if not st:
-            continue
-        j = len(tt & st) / max(1, len(tt | st))
-        if j >= 0.7:
-            return True
-    return False
-
 def _looks_like_yesno(ans: str) -> bool:
     return bool(re.fullmatch(r"\s*(yes|no)\s*", ans or "", flags=re.I))
 
@@ -151,7 +121,104 @@ def _preview(s: str, n=80) -> str:
     s = (s or "").replace("\n", " ").strip()
     return s if len(s) <= n else s[:n-1].rstrip() + "…"
 
-#llm plumbing
+#in-passage BM25 
+
+def _bm25_fit(docs):
+    """
+    docs: list[str] (windows/sentences). Returns idf and doc term stats.
+    """
+    token_docs = [ _key_tokens(d) for d in docs ]
+    df = {}
+    for doc in token_docs:
+        seen = set()
+        for t in doc:
+            if t not in seen:
+                df[t] = df.get(t, 0) + 1
+                seen.add(t)
+    N = max(1, len(docs))
+    idf = {}
+    for t, c in df.items():
+        # BM25 idf (Okapi) with +0.5 smoothing
+        idf[t] = math.log((N - c + 0.5) / (c + 0.5) + 1)
+    # store lengths
+    lengths = [len(d) for d in token_docs]
+    avgdl = (sum(lengths) / N) if N else 0.0
+    return {"idf": idf, "docs": token_docs, "avgdl": avgdl}
+
+def _bm25_score(model, query_tokens, doc_tokens, k1=1.5, b=0.75):
+    idf = model["idf"]; avgdl = model["avgdl"]
+    score = 0.0
+    dl = len(doc_tokens) or 1
+    qtf = {}
+    for t in query_tokens:
+        qtf[t] = qtf.get(t, 0) + 1
+    for t, qn in qtf.items():
+        if t not in idf:
+            continue
+        f = doc_tokens.count(t)
+        if f == 0:
+            continue
+        denom = f + k1 * (1 - b + b * (dl / (avgdl or 1)))
+        score += idf[t] * (f * (k1 + 1)) / denom
+    return score
+
+def _rank_inside_passage(passage: str, question: str, topn: int,
+                         win_tok=50, stride=25, max_slices=60,
+                         alpha=1.0, beta=1.0):
+    """
+    Combine simple token-overlap and in-passage BM25 to rank windows/sentences.
+    Returns list[str] of topn snippets.
+    """
+    snippets = _sentences_or_windows(passage, win_tok=win_tok, stride=stride, max_slices=max_slices)
+    if not snippets:
+        return []
+    qtok = _key_tokens(question)
+    model = _bm25_fit(snippets)
+
+    #precompute scores
+    rows = []
+    for s in snippets:
+        stok = _key_tokens(s)
+        overlap = len(set(qtok) & set(stok))
+        bm25 = _bm25_score(model, qtok, stok)
+        rows.append((alpha * overlap + beta * bm25, overlap, bm25, s))
+
+    #normalize tie-breaking: prefer shorter snippet on ties
+    rows.sort(key=lambda x: (-x[0], -x[1], -x[2], len(x[3])))
+    out = [r[3] for r in rows[:topn]]
+    return out
+
+#support check 
+
+def _supported(span: str, evidence_text: str) -> bool:
+    """
+    Trust short spans only if they appear verbatim in evidence.
+    For longer spans, allow a Jaccard threshold.
+    """
+    if not span or not evidence_text:
+        return False
+    span_n = _norm(span)
+    ev_n = _norm(evidence_text)
+    # short spans: must be verbatim
+    if len(span.split()) <= 5:
+        return span_n in ev_n
+    # longer spans: allow token similarity
+    tt = set(_key_tokens(span))
+    if not tt:
+        return False
+    best = 0.0
+    for line in evidence_text.splitlines():
+        st = set(_key_tokens(line))
+        if not st:
+            continue
+        j = len(tt & st) / max(1, len(tt | st))
+        if j > best:
+            best = j
+        if best >= 0.6:
+            return True
+    return False
+
+
 
 def call_ollama(model: str, endpoint: str, system: str, user: str, timeout_s: int = 600) -> str:
     payload = {
@@ -180,22 +247,25 @@ def parse_loose_json(raw: str) -> dict:
             return json.loads(raw[start:end+1])
         raise
 
-# salvage core 
+#salvage core 
+
+def _try_extract_with_llm(question: str, max_chars: int, evidence_lines: list,
+                          model: str, endpoint: str):
+    evidence_blob = "\n- " + "\n- ".join(evidence_lines)
+    user = USER_TEMPLATE.format(question=question, max_chars=max_chars, evidence=evidence_blob)
+    raw = call_ollama(model, endpoint, SYSTEM_PROMPT, user)
+    data = parse_loose_json(raw)
+    ans = (data.get("extracted_answer") or "").strip()
+    used = (data.get("used_quote") or "").strip()
+    return ans, used, (data.get("rationale") or "").strip()
 
 def salvage_record(rec, passage_text: str, model: str, endpoint: str, max_chars: int, topn: int):
     q = rec.get("grounded_question") or rec.get("draft_question") or ""
-    best = _rank_sentences_by_overlap(passage_text, q, topn=topn)
+    # Pass 1: default windowing
+    best = _rank_inside_passage(passage_text, q, topn=topn, win_tok=50, stride=25)
     if not best:
         return None, "[salvage_failed:no_overlap]"
-    evidence_blob = "\n- " + "\n- ".join(best)
-    user = USER_TEMPLATE.format(question=q, max_chars=max_chars, evidence=evidence_blob)
-    try:
-        raw = call_ollama(model, endpoint, SYSTEM_PROMPT, user)
-        data = parse_loose_json(raw)
-    except Exception as e:
-        return None, f"[salvage_failed:llm_error:{e}]"
-    ans = (data.get("extracted_answer") or "").strip()
-    used = (data.get("used_quote") or "").strip()
+    ans, used, rat = _try_extract_with_llm(q, max_chars, best, model, endpoint)
     if ans and len(ans) > max_chars:
         ans = _shorten_wordsafe(ans, max_chars)
     if _looks_like_yesno(ans):
@@ -203,11 +273,26 @@ def salvage_record(rec, passage_text: str, model: str, endpoint: str, max_chars:
     if ans and _supported(ans, "\n".join(best)):
         return {
             "answer": ans,
-            "evidence": used if _supported(used, passage_text) else " ".join(best),
+            "evidence": used if _supported(used, "\n".join(best)) else " ".join(best),
             "answerable": True,
             "rationale": (rec.get("rationale") or "") + " [salvaged_from_source]"
         }, "[salvaged_from_source]"
-    return None, "[salvage_failed:unsupported_or_empty]"
+
+    # Pass 2: wider windows if first attempt failed (better recall)
+    best_wide = _rank_inside_passage(passage_text, q, topn=topn+2, win_tok=80, stride=30)
+    if best_wide:
+        ans2, used2, rat2 = _try_extract_with_llm(q, max_chars, best_wide, model, endpoint)
+        if ans2 and len(ans2) > max_chars:
+            ans2 = _shorten_wordsafe(ans2, max_chars)
+        if not _looks_like_yesno(ans2) and ans2 and _supported(ans2, "\n".join(best_wide)):
+            return {
+                "answer": ans2,
+                "evidence": used2 if _supported(used2, "\n".join(best_wide)) else " ".join(best_wide),
+                "answerable": True,
+                "rationale": (rec.get("rationale") or "") + " [salvaged_from_source_wide]"
+            }, "[salvaged_from_source_wide]"
+
+    return None, "[salvage_failed]"
 
 
 def main():
@@ -267,10 +352,8 @@ def main():
                     if result:
                         rec.update(result)
                         salvaged += 1
-                        # log for each successful salvage 
                         ans_preview = _preview(rec.get("answer",""), 80)
                         print(f'\n[salvaged] source_id={src_id} question_ix={rec.get("question_ix")} len={len(rec.get("answer",""))} "{ans_preview}"')
-                        # --- optional CSV log ---
                         if log_writer:
                             log_writer.writerow([
                                 src_id,
@@ -301,5 +384,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
