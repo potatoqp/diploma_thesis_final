@@ -1,0 +1,463 @@
+import argparse, json, re, sys, os, csv, math
+import pandas as pd
+import requests
+from datetime import datetime, timezone
+
+DEFAULT_ENDPOINT = "http://localhost:11434/api/generate"
+
+# ---------------- LLM prompt ----------------
+
+SYSTEM_PROMPT = """You are a careful, citation-faithful answer extractor.
+You will receive:
+- A GROUNDED_QUESTION.
+- EVIDENCE_SENTENCES drawn from the same source passage.
+
+Rules:
+- Answer ONLY if the EVIDENCE_SENTENCES explicitly contain the answer.
+- Return the SHORTEST exact phrase (<= MAX_CHARS) that answers the question.
+- Prefer verbatim spans that literally occur in the evidence (copy-paste).
+- Avoid vague words alone (e.g., not just "approximately" without the number).
+- Do NOT answer Yes/No. If unclear or not present, return an EMPTY string.
+
+Return STRICT JSON with keys:
+  extracted_answer (string),
+  used_quote (string),
+  rationale (string)
+"""
+
+USER_TEMPLATE = """GROUNDED_QUESTION:
+{question}
+
+MAX_CHARS: {max_chars}
+
+EVIDENCE_SENTENCES:
+{evidence}
+
+Return JSON now.
+"""
+
+# ---------------- text utils ----------------
+
+WORD_RE = re.compile(r"[A-Za-z0-9']+")
+
+def _norm(s: str) -> str:
+    s = (s or "").lower()
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+STOPWORDS = set("""
+the a an and or of to in on for with as by from at that this those these be is are was were has have had not no
+what which who where when why how according study paper article report reports reported conclusion conclusions
+""".split())
+
+def _tokens(text: str):
+    return [t.lower() for t in WORD_RE.findall(text or "")]
+
+def _key_tokens(text: str):
+    return [t for t in _tokens(text) if t not in STOPWORDS]
+
+def _hard_sentence_split(text: str):
+    if not text:
+        return []
+    parts = re.split(r'(?<=[.!?])\s+|\n+', text)
+    return [p.strip() for p in parts if p and p.strip()]
+
+def _window_slices_by_tokens(text: str, window_tokens=50, stride=25, max_slices=60):
+    toks = _tokens(text)
+    if not toks:
+        return []
+    out = []
+    i = 0
+    while i < len(toks) and len(out) < max_slices:
+        chunk = toks[i:i+window_tokens]
+        if not chunk:
+            break
+        out.append(" ".join(chunk))
+        i += stride
+    if out and " ".join(toks[-window_tokens:]) != out[-1]:
+        out.append(" ".join(toks[-window_tokens:]))
+    return out
+
+def _sentences_or_windows(text: str, small_thresh=400, min_words=6,
+                          win_tok=50, stride=25, max_slices=60):
+    hard = _hard_sentence_split(text)
+    needs_windows = (len(hard) <= 1) or any(len(h) > small_thresh for h in hard)
+    if not needs_windows:
+        return hard
+    hybrid = []
+    for h in (hard or [text]):
+        if len(h) <= small_thresh and len(h.split()) >= min_words:
+            hybrid.append(h.strip())
+        else:
+            for w in _window_slices_by_tokens(h, window_tokens=win_tok, stride=stride, max_slices=max_slices):
+                hybrid.append(w)
+    seen, dedup = set(), []
+    for s in hybrid:
+        n = _norm(s)
+        if n not in seen:
+            seen.add(n)
+            dedup.append(s)
+    return dedup
+
+def _shorten_wordsafe(s: str, max_chars: int) -> str:
+    s = (s or "").strip()
+    if len(s) <= max_chars:
+        return s
+    cut = max(s.rfind(". ", 0, max_chars),
+              s.rfind("; ", 0, max_chars),
+              s.rfind(", ", 0, max_chars),
+              s.rfind(" — ", 0, max_chars),
+              s.rfind(" – ", 0, max_chars))
+    if cut > 40:
+        return s[:cut].rstrip()
+    cut = s.rfind(" ", 0, max_chars)
+    if cut > 40:
+        return s[:cut].rstrip()
+    m = re.match(r"^(.{0,%d})(?:\b|$)" % (max_chars-1), s)
+    return (m.group(1) if m else s[:max_chars-1]).rstrip()
+
+def _looks_like_yesno(ans: str) -> bool:
+    return bool(re.fullmatch(r"\s*(yes|no)\s*", ans or "", flags=re.I))
+
+def _preview(s: str, n=80) -> str:
+    s = (s or "").replace("\n", " ").strip()
+    return s if len(s) <= n else s[:n-1].rstrip() + "…"
+
+# ---------------- intent & patterns ----------------
+
+# detect if the question is a "policy/recommendation" style
+_SHOULD_Q_PATTERNS = [
+    r"^\s*what\s+should\b",
+    r"^\s*when\s+should\b",
+    r"^\s*under\s+what\s+circumstances\b",
+    r"^\s*in\s+what\s+circumstances\b",
+    r"\bshould\s+it\s+be\b",
+    r"\bshould\s+be\b",
+    r"\bwhen\s+is\s+it\s+(?:recommended|indicated|contraindicated)\b",
+]
+_SHOULD_SNIPPET_PATTERNS = [
+    r"\bshould(?:\s+not)?\s+[^.;:]+",
+    r"\bshould\s+be\s+[^.;:]+",
+    r"\bshould\s+be\s+(?:reserved|repeated)\s+[^.;:]*",
+    r"\bis\s+(?:recommended|indicated|contraindicated)\b[^.;:]*",
+    r"\brecommended\s+that\s+[^.;:]+",
+    r"\bought\s+to\s+[^.;:]+",
+    r"\bmust\s+be\s+[^.;:]+",
+    r"\b(?:is|are)\s+to\s+be\s+[^.;:]+",
+]
+
+def _question_is_should_style(q: str) -> bool:
+    qn = _norm(q)
+    return any(re.search(p, qn) for p in _SHOULD_Q_PATTERNS)
+
+def _snippet_has_modal_action(s: str) -> bool:
+    sn = _norm(s)
+    return any(re.search(p, sn) for p in _SHOULD_SNIPPET_PATTERNS)
+
+def _extract_modal_clause(text: str) -> str:
+    """
+    Try to lift a concise modal/action clause (e.g., 'should be repeated after the edema has disappeared').
+    Returns the first reasonable match; prefer shorter span.
+    """
+    candidates = []
+    for pat in _SHOULD_SNIPPET_PATTERNS:
+        for m in re.finditer(pat, text, flags=re.IGNORECASE):
+            span = m.group(0).strip()
+            # trim trailing connectors
+            span = re.split(r"[.;:]\s*", span)[0].strip()
+            # avoid ultra-short junk
+            if len(span.split()) >= 3:
+                candidates.append(span)
+    if not candidates:
+        return ""
+    # prefer shortest reasonable clause that isn't just "should be" by itself
+    candidates.sort(key=lambda x: (len(x), x))
+    return candidates[0]
+
+# ---------------- in-passage BM25 ----------------
+
+def _bm25_fit(docs):
+    token_docs = [_key_tokens(d) for d in docs]
+    df = {}
+    for doc in token_docs:
+        seen = set()
+        for t in doc:
+            if t not in seen:
+                df[t] = df.get(t, 0) + 1
+                seen.add(t)
+    N = max(1, len(docs))
+    idf = {}
+    for t, c in df.items():
+        idf[t] = math.log((N - c + 0.5) / (c + 0.5) + 1)
+    lengths = [len(d) for d in token_docs]
+    avgdl = (sum(lengths) / N) if N else 0.0
+    return {"idf": idf, "docs": token_docs, "avgdl": avgdl}
+
+def _bm25_score(model, query_tokens, doc_tokens, k1=1.5, b=0.75):
+    idf = model["idf"]; avgdl = model["avgdl"]
+    score = 0.0
+    dl = len(doc_tokens) or 1
+    qtf = {}
+    for t in query_tokens:
+        qtf[t] = qtf.get(t, 0) + 1
+    for t, qn in qtf.items():
+        if t not in idf:
+            continue
+        f = doc_tokens.count(t)
+        if f == 0:
+            continue
+        denom = f + k1 * (1 - b + b * (dl / (avgdl or 1)))
+        score += idf[t] * (f * (k1 + 1)) / denom
+    return score
+
+def _rank_inside_passage(passage: str, question: str, topn: int,
+                         win_tok=50, stride=25, max_slices=60,
+                         alpha=1.0, beta=1.0, gamma=1.2):
+    """
+    Combine token-overlap (alpha), in-passage BM25 (beta), and a modal-action boost (gamma)
+    when the question is a 'should/circumstances' style. Returns list[str] top snippets.
+    """
+    snippets = _sentences_or_windows(passage, win_tok=win_tok, stride=stride, max_slices=max_slices)
+    if not snippets:
+        return []
+    qtok = _key_tokens(question)
+    model = _bm25_fit(snippets)
+    q_is_should = _question_is_should_style(question)
+
+    rows = []
+    for s in snippets:
+        stok = _key_tokens(s)
+        overlap = len(set(qtok) & set(stok))
+        bm25 = _bm25_score(model, qtok, stok)
+        modal = 1.0
+        if q_is_should and _snippet_has_modal_action(s):
+            modal += gamma  # boost modal/action clauses
+        score = alpha * overlap + beta * bm25
+        score *= modal
+        rows.append((score, overlap, bm25, _snippet_has_modal_action(s), s))
+
+    # prefer higher score, then overlap, then bm25, then modal present, then shorter snippet
+    rows.sort(key=lambda x: (-x[0], -x[1], -x[2], not x[3], len(x[4])))
+    out = [r[4] for r in rows[:topn]]
+    # If question is 'should'-style, pre-prioritize any modal snippets not already in topn
+    if q_is_should:
+        modal_extra = [s for s in snippets if _snippet_has_modal_action(s) and s not in out]
+        out = (modal_extra[:2] + out)[:max(topn, len(out))]  # prepend a couple of modal lines
+        # dedup while preserving order
+        seen, dedup = set(), []
+        for s in out:
+            n = _norm(s)
+            if n not in seen:
+                seen.add(n); dedup.append(s)
+        out = dedup[:topn]
+    return out
+
+# ---------------- support check ----------------
+
+def _supported(span: str, evidence_text: str) -> bool:
+    """
+    Trust short spans only if they appear verbatim in evidence.
+    For longer spans, allow a Jaccard threshold.
+    """
+    if not span or not evidence_text:
+        return False
+    span_n = _norm(span)
+    ev_n = _norm(evidence_text)
+    if len(span.split()) <= 5:
+        return span_n in ev_n
+    tt = set(_key_tokens(span))
+    if not tt:
+        return False
+    best = 0.0
+    for line in evidence_text.splitlines():
+        st = set(_key_tokens(line))
+        if not st:
+            continue
+        j = len(tt & st) / max(1, len(tt | st))
+        if j > best:
+            best = j
+        if best >= 0.6:
+            return True
+    return False
+
+# ---------------- LLM plumbing ----------------
+
+def call_ollama(model: str, endpoint: str, system: str, user: str, timeout_s: int = 600) -> str:
+    payload = {
+        "model": model,
+        "prompt": user,
+        "system": system,
+        "options": {"temperature": 0.2, "top_p": 0.9, "num_ctx": 8192},
+        "stream": False,
+    }
+    r = requests.post(endpoint, json=payload, timeout=timeout_s)
+    r.raise_for_status()
+    data = r.json()
+    return data.get("response", "")
+
+def parse_loose_json(raw: str) -> dict:
+    raw = raw.strip()
+    try:
+        return json.loads(raw)
+    except Exception:
+        start = raw.find("{"); end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            return json.loads(raw[start:end+1])
+        raise
+
+# ---------------- salvage core ----------------
+
+def _try_extract_with_llm(question: str, max_chars: int, evidence_lines: list,
+                          model: str, endpoint: str):
+    evidence_blob = "\n- " + "\n- ".join(evidence_lines)
+    user = USER_TEMPLATE.format(question=question, max_chars=max_chars, evidence=evidence_blob)
+    raw = call_ollama(model, endpoint, SYSTEM_PROMPT, user)
+    data = parse_loose_json(raw)
+    ans = (data.get("extracted_answer") or "").strip()
+    used = (data.get("used_quote") or "").strip()
+    return ans, used, (data.get("rationale") or "").strip()
+
+def salvage_record(rec, passage_text: str, model: str, endpoint: str, max_chars: int, topn: int):
+    q = rec.get("grounded_question") or rec.get("draft_question") or ""
+    # Pass 1: default windowing (modal-aware ranking)
+    best = _rank_inside_passage(passage_text, q, topn=topn, win_tok=50, stride=25)
+    if not best:
+        return None, "[salvage_failed:no_overlap]"
+    ans, used, rat = _try_extract_with_llm(q, max_chars, best, model, endpoint)
+    if ans and len(ans) > max_chars:
+        ans = _shorten_wordsafe(ans, max_chars)
+    if _looks_like_yesno(ans):
+        ans = ""
+    if ans and _supported(ans, "\n".join(best)):
+        return {
+            "answer": ans,
+            "evidence": used if _supported(used, "\n".join(best)) else " ".join(best),
+            "answerable": True,
+            "rationale": (rec.get("rationale") or "") + " [salvaged_from_source]"
+        }, "[salvaged_from_source]"
+
+    # Pass 2: wider windows (better recall)
+    best_wide = _rank_inside_passage(passage_text, q, topn=topn+2, win_tok=80, stride=30)
+    if best_wide:
+        ans2, used2, rat2 = _try_extract_with_llm(q, max_chars, best_wide, model, endpoint)
+        if ans2 and len(ans2) > max_chars:
+            ans2 = _shorten_wordsafe(ans2, max_chars)
+        if not _looks_like_yesno(ans2) and ans2 and _supported(ans2, "\n".join(best_wide)):
+            return {
+                "answer": ans2,
+                "evidence": used2 if _supported(used2, "\n".join(best_wide)) else " ".join(best_wide),
+                "answerable": True,
+                "rationale": (rec.get("rationale") or "") + " [salvaged_from_source_wide]"
+            }, "[salvaged_from_source_wide]"
+
+    # Pass 3: deterministic modal-clause extraction for 'should/circumstances' questions
+    if _question_is_should_style(q):
+        # search within the most relevant snippets first, then the whole passage
+        search_space = "\n".join((best_wide or best) or [])
+        if not search_space:
+            search_space = passage_text
+        clause = _extract_modal_clause(search_space)
+        clause = clause.strip()
+        if clause and len(clause) > max_chars:
+            clause = _shorten_wordsafe(clause, max_chars)
+        if clause and not _looks_like_yesno(clause) and _supported(clause, search_space):
+            return {
+                "answer": clause,
+                "evidence": search_space,
+                "answerable": True,
+                "rationale": (rec.get("rationale") or "") + " [salvaged_modal_clause]"
+            }, "[salvaged_modal_clause]"
+
+    return None, "[salvage_failed]"
+
+# ---------------- main ----------------
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in", dest="inp", required=True, help="cf_grounded_pruned.jsonl (input)")
+    ap.add_argument("--passages", required=True, help="cf_passages.csv (with id, passage columns)")
+    ap.add_argument("--out", required=True, help="output JSONL")
+    ap.add_argument("--model", default="llama3.1")
+    ap.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    ap.add_argument("--max_chars", type=int, default=140)
+    ap.add_argument("--topn", type=int, default=4)
+    ap.add_argument("--checkpoint", type=int, default=10)
+    ap.add_argument("--log_csv", default="", help="optional CSV path to log salvaged rows")
+    args = ap.parse_args()
+
+    df = pd.read_csv(args.passages)
+    if "id" not in df.columns or "passage" not in df.columns:
+        print("ERROR: cf_passages.csv must have columns: id, passage", file=sys.stderr)
+        sys.exit(1)
+    id_to_passage = {str(r["id"]): str(r["passage"]) for _, r in df.iterrows()}
+
+    total = 0
+    candidates = 0
+    salvaged = 0
+    kept = 0
+
+    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
+
+    log_writer = None
+    log_fh = None
+    if args.log_csv:
+        os.makedirs(os.path.dirname(args.log_csv) or ".", exist_ok=True)
+        log_fh = open(args.log_csv, "w", newline="", encoding="utf-8")
+        log_writer = csv.writer(log_fh)
+        log_writer.writerow(["source_id", "question_ix", "grounded_question", "answer_len", "answer_preview"])
+
+    with open(args.inp, "r", encoding="utf-8") as fin, \
+         open(args.out, "w", encoding="utf-8") as fout:
+
+        for line in fin:
+            total += 1
+            rec = json.loads(line)
+
+            needs = (not rec.get("answerable", False)) or (not (rec.get("answer") or "").strip())
+            if not needs:
+                kept += 1
+                rec["salvaged_at"] = datetime.now(timezone.utc).isoformat()
+                fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            else:
+                candidates += 1
+                src_id = rec.get("source_id")
+                passage = id_to_passage.get(str(src_id), "")
+                if not passage:
+                    rec["rationale"] = (rec.get("rationale") or "") + " [salvage_failed:no_passage]"
+                else:
+                    result, tag = salvage_record(rec, passage, args.model, args.endpoint, args.max_chars, args.topn)
+                    if result:
+                        rec.update(result)
+                        salvaged += 1
+                        ans_preview = _preview(rec.get("answer",""), 80)
+                        print(f'\n[salvaged] source_id={src_id} question_ix={rec.get("question_ix")} len={len(rec.get("answer",""))} "{ans_preview}"')
+                        if log_writer:
+                            log_writer.writerow([
+                                src_id,
+                                rec.get("question_ix"),
+                                _preview(rec.get("grounded_question") or rec.get("draft_question") or "", 120),
+                                len(rec.get("answer") or ""),
+                                ans_preview
+                            ])
+                    else:
+                        rec["rationale"] = (rec.get("rationale") or "") + " " + tag
+                rec["salvaged_at"] = datetime.now(timezone.utc).isoformat()
+                fout.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+            # progress + checkpoint
+            print(f"[progress] {total}", end="\r")
+            if total % args.checkpoint == 0:
+                fout.flush()
+                os.fsync(fout.fileno())
+                print(f"\n[checkpoint] saved after {total}")
+
+    if log_fh:
+        log_fh.close()
+
+    print(f"\n[done salvage] wrote {args.out}")
+    print(f"  total={total}  kept={kept}  candidates={candidates}  salvaged={salvaged}")
+    if args.log_csv:
+        print(f"  log: {args.log_csv}")
+
+if __name__ == "__main__":
+    main()
