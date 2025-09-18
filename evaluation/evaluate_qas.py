@@ -84,7 +84,7 @@ def run_bertscore(refs: List[str], hyps: List[str], lang: str = "en") -> Tuple[L
 
 
 
-#parsing human evaluations
+#parsing human evaluations, with my structure
 
 def parse_human_file(txt: str) -> List[Dict]:
     parts = re.split(r'(?m)^\s*(\d+\*?\))', txt.strip())
