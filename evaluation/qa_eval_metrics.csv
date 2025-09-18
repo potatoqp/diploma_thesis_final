@@ -1,0 +1,35 @@
+entry,source_id,question_ix,ref_variant,reference,model_answer,model_found,notes,rouge1_p,rouge1_r,rouge1_f1,rougeL_f1,bertscore_p,bertscore_r,bertscore_f1
+1),6,0,ref,the number was significantly positively correlated,Significantly positively correlated,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.6302760243415833,0.4435597360134125,0.5360761880874634
+2),43,0,ref,"they feel socially embarrassed, and feel different",broncho pulmonary disease,True,bm25 got 331 as the most relevant passage,0.0,0.0,0.0,0.0,-0.39299073815345764,0.03813184052705765,-0.18525710701942444
+2),43,0,ref,broncho pulmonary disease is the major problem encountered,broncho pulmonary disease,True,bm25 got 331 as the most relevant passage,1.0,0.375,0.5454545454545454,0.5454545454545454,0.7843616604804993,0.4652547240257263,0.6208396553993225
+3),55,1,ref,"the three immunoglobulins: igg, iga and igm","normal levels of the three serum immunoglobulins igg, iga and igm",True,,0.6363636363636364,1.0,0.7777777777777778,0.7777777777777778,0.667273223400116,0.7757918238639832,0.7214674949645996
+3*),18,1,ref,"because cf patients have normal or elevated concentrations of immunoglobulins, but here the immunoglobulins",labile inhibitor,True,,0.0,0.0,0.0,0.0,-0.31868401169776917,-0.20104843378067017,-0.2585548162460327
+4),24,1,ref,the upstream resistances were high,upstream resistances,True,,1.0,0.4,0.5714285714285715,0.5714285714285715,0.7178002595901489,0.38686445355415344,0.5480713248252869
+5),8,1,ref,pseudomonas aeruginosa,Pseudomonas aeruginosa,True,,1.0,1.0,1.0,1.0,0.6145204305648804,0.9043157696723938,0.7561335563659668
+6),75,1,ref,it is directly related,directly related,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.38369423151016235,0.1920914351940155,0.28729090094566345
+7),98,0,ref,a defect in hemoglobin synthesis,failure in protein synthesis,True,,0.5,0.4,0.4444444444444445,0.4444444444444445,0.6285766363143921,0.47181206941604614,0.5498039722442627
+8),112,1,ref,"they have provided valuable scientific progress in studying, purifying and characterising a molecule/molecules",valuable scientific progress,True,,1.0,0.21428571428571427,0.35294117647058826,0.35294117647058826,0.5439022183418274,-0.05136219412088394,0.23041099309921265
+9),121,0,ref,an increased uptake of herapin in short term c f white blood cells,an increased uptake of heparin,True,,0.8,0.3076923076923077,0.4444444444444444,0.4444444444444444,0.519176185131073,0.20991772413253784,0.36106786131858826
+10),78,1,ref,chemical administrations,chemical administrations,True,,1.0,1.0,1.0,1.0,1.0000007152557373,1.0000007152557373,1.0000007152557373
+11),60,0,ref,increased responsiveness of the trachea and brochi leading to difficulty breathing because of the generalized narrowing of the airways,generalized narrowing of the airways,True,,1.0,0.2631578947368421,0.4166666666666667,0.4166666666666667,0.607896089553833,0.18397274613380432,0.38849228620529175
+12),38,0,ref,four methods were evaluated,four methods,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.7190964221954346,0.38592883944511414,0.5481839776039124
+13),24,0,ref,the elevated closing volumes,the elevated closing volumes,True,,1.0,1.0,1.0,1.0,1.0000007152557373,1.0000007152557373,1.0000007152557373
+14),12,1,ref,it depends on reports of other similar cases,reports of other similar cases,True,,1.0,0.625,0.7692307692307693,0.7692307692307693,0.5560867190361023,0.3156675100326538,0.4341028034687042
+15),2,1,ref,malnutrition,malnutrition,True,,1.0,1.0,1.0,1.0,1.000002145767212,1.000002145767212,1.000002145767212
+16),64,0,ref,lung involvement,lung involvement,True,,1.0,1.0,1.0,1.0,1.0000007152557373,1.0000007152557373,1.0000007152557373
+17),117,1,ref,"chromosome aberrations, neural tube malformations and some recessively inherited and x linked metabolic disorders","chromosome aberrations, neural tube malformations, and some recessively inherited and X-linked metabolic disorders",True,,0.9230769230769231,0.8571428571428571,0.888888888888889,0.888888888888889,0.8628889918327332,0.8577607274055481,0.8605504631996155
+18),125,0,ref,it seems to be confined to exocrine glands,exocrine glands,True,,1.0,0.25,0.4,0.4,0.4498583674430847,0.10324718803167343,0.27196648716926575
+19),89,0,ref,steatorrhea and azotorrhea,steatorrhea and azotorrhea,True,,1.0,1.0,1.0,1.0,0.9999996423721313,0.9999996423721313,0.9999996423721313
+20),78,0,ref,in some experimental conditions,some experimental conditions,True,,1.0,0.75,0.8571428571428571,0.8571428571428571,0.8380926251411438,0.6571087837219238,0.746568500995636
+21),7,1,ref,mucoid strains,mucoid strains,True,,1.0,1.0,1.0,1.0,0.9999996423721313,0.9999996423721313,0.9999996423721313
+22),46,0,ref,its diarrhoea,diarrhoea,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.673499584197998,0.5458267331123352,0.6095610857009888
+23),80,1,ref,its affected by the condition of the host,the condition of the host,True,,1.0,0.625,0.7692307692307693,0.7692307692307693,0.6784768104553223,0.47992756962776184,0.5780975222587585
+24),110,0,ref,children are abnormally susceptible to any respiratory pathogen from birth,Increased resistance to tuberculosis,True,,0.25,0.1,0.14285714285714288,0.14285714285714288,0.3124399781227112,0.14384661614894867,0.22801972925662994
+25),110,1,ref,gram negative bacteria,Gram negative bacteria,True,,1.0,1.0,1.0,1.0,0.9856770634651184,0.9856780767440796,0.9857008457183838
+26),93,1,ref,increasing age,Increasing age,True,,1.0,1.0,1.0,1.0,0.9831275939941406,0.9831287860870361,0.9831556081771851
+27),69,0,ref,approximately one of every,approximately one of every,True,,1.0,1.0,1.0,1.0,0.9999992847442627,0.9999992847442627,0.9999992847442627
+28),30,1,ref,there was no significant increase in muscle strength,no significant increase,True,,1.0,0.375,0.5454545454545454,0.5454545454545454,0.5639533996582031,0.26702016592025757,0.4123169481754303
+29),70,0,ref,"acetyl anisylalanine, p methoxyphenyl pruvic acid and lacitic acids",mainly to acetyl anisylalanine and p methoxyphenyl pyruvic acid,True,,0.6666666666666666,0.6666666666666666,0.6666666666666666,0.5555555555555556,0.6846327781677246,0.6089655160903931,0.6471152901649475
+30),116,0,ref,excessive wrinkling of the skin after soaking in tap water,excessive wrinkling of the skin after soaking in tap water,True,,1.0,1.0,1.0,1.0,1.0,1.0,1.0
+31*),72,0,from_72,discuss how the application of one methodology of the study of the human cell has added insight into understanding the genetic reasons for such disparate clinical phenotypes,to report the birth of a child with cystic fibrosis whose mother also has the disease,True,,0.25,0.14814814814814814,0.18604651162790697,0.18604651162790697,0.06669478118419647,0.05255070701241493,0.06114045903086662
+31*),72,0,from_687,to report the birth of a child with cystic fibrosis whose mother also had the disease,to report the birth of a child with cystic fibrosis whose mother also has the disease,True,,0.9375,0.9375,0.9375,0.9375,0.9806492328643799,0.9806505441665649,0.9806813597679138
