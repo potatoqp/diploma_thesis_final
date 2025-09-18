@@ -1,13 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Evaluate model answers in cf_grounded_pruned_salvagedv4.jsonl
-against your human-written answers in my-evaluations.txt.
-
-- Handles notes like "bm25 got 331..." (kept in 'notes' column)
-- Handles "answer from 72" / "answer from 687" as separate rows
-- Computes ROUGE-1 (P/R/F1), ROUGE-L (F1), BERTScore (if available)
-"""
 
 import argparse
 import json
@@ -24,9 +14,9 @@ except Exception:
     BERTSCORE_AVAILABLE = False
 
 
-# --------------------------
-# Text utils + ROUGE
-# --------------------------
+
+#text utils + ROUGE
+
 def normalize_text(s: str) -> str:
     """Lowercase, strip, keep only [a-z0-9 .-%] to make overlap stable on short answers."""
     s = (s or "").strip().lower()
@@ -81,9 +71,8 @@ def rouge_l_f1(ref: str, hyp: str) -> float:
     return 0.0 if (rec + prec) == 0 else 2 * rec * prec / (rec + prec)
 
 
-# --------------------------
-# BERTScore wrapper
-# --------------------------
+
+#BERTScore wrapper
 def run_bertscore(refs: List[str], hyps: List[str], lang: str = "en") -> Tuple[List[Optional[float]], List[Optional[float]], List[Optional[float]]]:
     if not BERTSCORE_AVAILABLE:
         return [None]*len(refs), [None]*len(refs), [None]*len(refs)
@@ -94,9 +83,9 @@ def run_bertscore(refs: List[str], hyps: List[str], lang: str = "en") -> Tuple[L
         return [None]*len(refs), [None]*len(refs), [None]*len(refs)
 
 
-# --------------------------
-# Parsing your my-evaluations.txt
-# --------------------------
+
+#parsing human evaluations
+
 def parse_human_file(txt: str) -> List[Dict]:
     parts = re.split(r'(?m)^\s*(\d+\*?\))', txt.strip())
     entries = []
@@ -133,9 +122,6 @@ def parse_human_file(txt: str) -> List[Dict]:
     return items
 
 
-# --------------------------
-# Main
-# --------------------------
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--human", required=True, help="Path to my-evaluations.txt")
