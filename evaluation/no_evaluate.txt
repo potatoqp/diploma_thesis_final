@@ -1,0 +1,62 @@
+1){"source_id": 1, "question_ix": 1, "draft_question": "Does the presence of many precipitins against pseudomonas aeruginosa in patients provide protection to their respiratory tract?", "grounded_question": "Does the presence of many precipitins against Pseudomonas aeruginosa provide protection to patients' respiratory tracts?", "answer": "No"
+
+passage:1,pseudomonas aeruginosa infection in cystic fibrosis occurrence of precipitating antibodies against pseudomonas aeruginosa in relation to the concentration of sixteen serum proteins and the clinical and radiographical status of the lungs the significance of pseudomonas aeruginosa infection in the respiratory tract of cystic fibrosis patients have been studied by means of immunoelectrophoretical analysis of patients sera for the number of precipitins against pseudomonas aeruginosa and the concentrations of serum proteins in addition the clinical and radiographical status of the lungs have been evaluated using scoring systems precipitins against pseudomonas aeruginosa were demonstrated in all sera the maximum number in one serum was the concentrations of of the serum proteins were significantly changed compared with matched control persons notably igg and iga were elevated and the acute phase proteins were changed the latter suggesting active tissue damage the concentrations of of the acute phase proteins notably haptoglobin were correlated to the number of precipitins suggesting that the respiratory tract infection in patients with many precipitins is accompanied by more tissue damage than the infection in patients with few precipitins the results indicate no protective value of the many precipitins on the tissue of the respiratory tract
+
+CORRECT
+
+2){"source_id": 3, "question_ix": 1, "draft_question": "Can this method detect heterozygotes?", "grounded_question": "Can this method detect heterozygotes?", "answer": "No"
+
+passage:3,a clinical study of the diagnosis of cystic fibrosis by instrumental neutron activation analysis of sodium in nail clippings this article reports on the possibility of using instrumental neutron activation analysis inaa of sodium in nail clippings for diagnosing cystic fibrosis cf in children and adults for detecting heterozygotes and for screening in the neonatal period nail clippings from newborns cf patients two of them newborns healthy controls and heterozygotes were analyzed the discrimination between cf patients and controls was found to be precise for individuals above one year of age and inaa of nail clippings should be accepted as a diagnostic test for cf after this age heterozygotes could not be detected by the method during the first five days of life there is a big overlap between the values from normal newborns and those of cf children which makes the method invaluable for early screening for cf
+
+CORRECT
+
+3){"source_id": 29, "question_ix": 1, "draft_question": "Was there a confirmed case of secretory otitis media in the group studied?", "grounded_question": "Was there a confirmed case of secretory otitis media in the group studied?", "answer": "No"
+
+passage:29,upper respiratory tract in cystic fibrosis ear nose throat survey of children an ear nose throat survey was carried out on children aged to years with cystic fibrosis were shown to be transiently deaf associated with eustachian tube dysfunction there were no confirmed cases of secretory otitis media children were found to have nasal polyps or gave a history of polypectomy though a high incidence of middle ear problems in children with cystic fibrosis has been reported in the u s a neither deafness nor secretory otitis media was found to be a problem in the group studied
+
+
+CORRECT
+
+
+
+4){"source_id": 54, "question_ix": 0, "draft_question": "In erythrocyte membranes from cystic fibrosis patients compared to control subjects, was there a significant difference in high affinity Ca binding in the presence of ATP?", "grounded_question": "Were there any significant differences in high affinity Ca binding in erythrocyte membranes from cystic fibrosis patients compared to control subjects, in the presence of ATP?", "answer": "No"
+
+passage:54,ca uptake and binding by isolated erythrocyte membranes from cystic fibrosis and control subjects ca atpase activity high affinity ca binding in the presence and absence of atp and low affinity ca binding at added cacl concentrations of microm microm and mm were measured in isolated erythrocyte membranes from cystic fibrosis and control subjects no significant difference was detected between the two groups for any of these measurements
+
+CORRECT
+
+
+
+5){"source_id": 105, "question_ix": 1, "draft_question": "Is skin wrinkling after immersion age-related in newborns?", "grounded_question": "Is skin wrinkling after immersion age-related?", "answer": "No"
+
+passage:105,letter skin wrinkling in cystic fibrosis dr economou mavrou and his colleagues appear to have misunderstood my previous note concerning skin wrinkling in cystic fibrosis the range of normality varies in different climatic conditions and in aukland wrinkling does not appear in cool tap water c under minutes in normals skin wrinkling on immersion appears to be age related but is difficult to detect reliably in the newborn prior washing of the hands or immersion in sea water even the day before accelerates skin wrinkling as does warm weather i would suggest that normality needs redefining in athens if of normals were abnormal
+
+Could be wrong, but its not clear. It appears to be age related but is difficult to detect reliably
+
+
+6){"source_id": 106, "question_ix": 1, "draft_question": "Are there any significant differences in NaSO incorporation between heterozygotes and normal donors?", "grounded_question": "Are there any significant differences in NaSO incorporation between heterozygotes and normal donors?", "answer": "No"
+
+passage:106,letter sulphate incorporation of leucocytes from patients with cystic fibrosis in preliminary studies of short term leukocyte cultures using na so incorporation into cetyl pyridinium chloride c p c precipitable material presumably glycosaminoglycans g a g we have found significant variation among c f patients and their parents obligate heterozygotes this biochemical heterogeneity is comparable to what has been reported in fibroblast cultures and serum the amount of na so incorporated into g a g material found in both the incubation medium and the cells from c f patients is significantly increased over normals a similar analysis between normals and heterozygotes shows no significant difference in na so incorporation into g a g material of the cells however out of heterozygotes appeared to show a pattern of increased incorporation into material found in the incubation medium indicated by a higher mean than the normal donors these results suggest yet another system to study the effects of the c f gene the incorporation of na so into g a g material of c f leukocyte cultures gives additional evidence for the genetic heterogeneity in this disorder
+
+CORRECT
+
+
+7){"source_id": 108, "question_ix": 1, "draft_question": "Can this procedure differentiate between cystic fibrosis carriers and non-carriers?", "grounded_question": "Can this procedure differentiate between cystic fibrosis carriers and non-carriers?", "answer": "No"
+
+passage:108,increased uptake of s heparin by lymphocytes from patients with cystic fibrosis previous studies on cystic fibrosis c f have shown increased mucopolysaccharide synthesis in c f cells the uptake of s heparin sulphonate into purified lymphocytes was examined after days culture in medium supplemented with autochthonous plasma fourteen c f homozygotes seven siblings and nine parents all showed significantly greater uptake p of s heparin than cultures from twenty three normal controls there was partial overlap in heparin uptake values between c f patients and their families this procedure thus differentiates c f families from the normal population but does not differentiate c f homozygotes from heterozygotes it is hoped that either variations in culture methods or a combination of this procedure with other measurements of c f such as ciliary dyskinesis or cellular metachromasia will permit unequivocal identification of c f carriers
+
+CORRECT
+
+8){"source_id": 115, "question_ix": 0, "draft_question": "Is skin wrinkling in children with cystic fibrosis dependent on an intact peripheral nerve supply?", "grounded_question": "Is skin wrinkling in children with cystic fibrosis dependent on an intact peripheral nerve supply?", "answer": "No"
+
+passage:115,letter skin wrinkling and nerve function we were interested in professor elliott s description of early skin wrinkling in children with cystic fibrosis although this phenomenon may well be related to osmotic differences between skin and water it has been observed that skin wrinkling as seen on the finger pulp is fully dependent on an intact peripheral nerve supply this is a useful sign in peripheral nerve lesions and helpful in following recovery when the wrinkling returns furthermore it was our impression that in normal individuals wrinkling was more apparent on the left hand than on the right handed individuals however in a preliminary study using fingerprint densities measured by photometry no significant differences were found between the sides
+
+WRONG
+
+
+9){"source_id": 120, "question_ix": 0, "draft_question": "Should mass population screening for inherited metabolic diseases other than phenylketonuria be established?", "grounded_question": "Should mass population screening for inherited metabolic diseases other than phenylketonuria be established?", "answer": "No"
+
+passage:120,inherited metabolic disease at present it is extremely doubtful if mass population screening for any inherited metabolic disease other than phenylketonuria should be established beyond the few pilot studies at present in progress for many diseases although early detection is clearly desirable or the technical means of screening are available even the establishment of pilot surveys is not yet indicated instead methods of screening more limited populations at risk for particular disorders within a nationally coordinated administrative structure should be established those with experience of mass screening for more than one inherited metabolic disease must surely be convinced that in new programmes launched prematurely the harm caused by incomplete detection of cases or recognition of disorders whose management is uncertain or unavailable can far outweigh any benefits
+
+CORRECT
+
