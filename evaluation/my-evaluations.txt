@@ -6,9 +6,6 @@ answer: the number was significantly positively correlated
 
 2){"source_id": 43, "question_ix": 0, "draft_question": "What is a major problem experienced by patients with cystic fibrosis?", "grounded_question": "What is a major problem experienced by patients with cystic fibrosis?"
 
-passage:43,family response to cystic fibrosis the effects of cystic fibrosis on victorian families with one or more affected children were examined in a study carried out between august and february the social and emotional problems experienced by family members particularly the patients and mothers are reported on at all ages socially embarrassing symptoms and awareness of being different create major problems for the patient the uncertainty of prognosis and doubts about the prospects of employment are specially relevant for the teenager it is suggested that the patient be given ample opportunity from early adolescence onward to discuss all aspects of his disease and that more appropriate provision should be made for the total care of adult patients many problems such as depression feelings of isolation and the physical demands of constant treatment which the parents of children with cystic fibrosis experience are probably similar to those confronting parents of other chronically ill and handicapped children but special difficulties stem from the genetic basis of cystic fibrosis and from the knowledge of an eventually fatal outcome the roles of professional members of the medical team are touched on particularly in relation to genetic counseling and the provision of practical and emotional support to parents comments are made on the establishment of lay organisations the financial strain associated with obtaining regular medical attention was looked at and suggestions are made for minimizing the economic problems of certain vulnerable families
-
-answer:they feel socially embarrassed, and feel different
 
 bm25 got 331 as the most relevant passage
 
@@ -24,11 +21,6 @@ passage:55,some aspects of immunity in patients with cystic fibrosis various asp
 answer: the three immunoglobulins: igg, iga and igm
 
 
-3*){"source_id": 18, "question_ix": 1, "draft_question": "Why do the authors believe their data suggest the presence of a labile inhibitor rather than an immunoglobulin (IgA) deficiency?", "grounded_question": "Why do the authors believe their data suggest the presence of a labile inhibitor rather than an IgA deficiency?"
-
-passage:18,letter selective inhibition of phagocytic activity of rabbit alveolar macrophages by cystic fibrosis serum as far as rabbit alveolar macrophages are concerned the concentration of homozygous cf serum used in our experiments was even greater than the fourfold concentration which biggar and associates state was required for normal phagocytosis increasing dilutions of homozygous cf sera with either hanks balanced salt solution or normal human serum thus decreasing its concentration increased the capacity of the rabbit alveolar macrophages to phagocytize and kill pseudomonas aeruginosa increasing concentrations had just the opposite effect suspension of rabbit alveolar macrophages in human serum reduced their phagocytic activity but activity was reduced more by human cf serum than by human normal serum this is not unexpected because high human serum concentrations are likely to be toxic to rabbit alveolar macrophages because the inhibition of phagocytosis was absent when homozygous cf serum more than hours old or previously heated or frozen was used and because of our observations that dilution increased macrophage phagocytic ability we feel our data demonstrate the presence of a labile inhibitor rather than a deficiency since it is well known that cf patients have normal or elevated concentrations of immunoglobulins including iga in their sera and pulmonary secretions and respond to infection and iga has not been shown to be essential for alveolar macrophage phagocytosis of pseudomonas aeruginosa we cannot agree that this inhibition is due to an iga deficiency we also note that some of the sera used in the experiments of biggar and associates were stored at degrees c perhaps this may account for the difference in results
-
-answer: because cf patients have normal or elevated concentrations of immunoglobulins, but here the immunoglobulins (iga has not been essential)
 
 4){"source_id": 24, "question_ix": 1, "draft_question": "According to the passage, what was a limitation of using loss of recoil as an explanation for low maximum expiratory flows in patients with cystic fibrosis?", "grounded_question": "What limitation of using loss of recoil as an explanation for low maximum expiratory flows was found in patients with cystic fibrosis?"
 
@@ -210,6 +202,8 @@ answer from 687: to report the birth of a child with cystic fibrosis whose mothe
 
 
 answer from 687 is shorter and clearer, and that why the model picked that
+
+
 
 
 
