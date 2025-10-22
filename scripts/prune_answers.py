@@ -187,7 +187,7 @@ def _normalize_spaces(s: str) -> str:
 #prefix detection helpers 
 
 def _raw_prefix_clip(text: str, max_chars: int) -> str:
-    """Exact naive prefix: first max_chars-3 chars + '...' (no trimming)."""
+    
     if not text:
         return ""
     t = text.strip()
@@ -196,23 +196,14 @@ def _raw_prefix_clip(text: str, max_chars: int) -> str:
     return t[:max_chars - 3] + "..."
 
 def _has_punctuation_before_cap(text: str, max_chars: int) -> bool:
-    """
-    True if a natural boundary (.[!?;,:]) exists near the end of the kept window,
-    meaning we *could* stop earlier without a dumb prefix cut.
-    """
+    
     if not text or len(text) <= max_chars:
         return False
     window = text[:max_chars - 3]
     return bool(re.search(r"[\.!?;,:]\s*[^\s]*$", window[-30:]))
 
 def _is_bare_prefix(ans: str, source: str, max_chars: int) -> bool:
-    """
-    Flags cases where `ans` is the *start* of source (no ellipsis) and likely truncated:
-      - source starts with ans (normalized-space compare),
-      - answer is near the cap (>= 85% of cap or within 8 chars),
-      - AND (no terminal punctuation) OR (ends mid-word),
-      - AND there wasn't an earlier punctuation boundary in the kept window.
-    """
+    
     if not ans or not source:
         return False
     a = _normalize_spaces(ans)
@@ -232,11 +223,7 @@ def _is_bare_prefix(ans: str, source: str, max_chars: int) -> bool:
     return False
 
 def _is_prefix_clip_answer(ans: str, evidence: str, contexts: List[Dict[str, Any]], max_chars: int) -> bool:
-    """
-    True iff ans:
-      - equals the raw prefix clip (with ... or …) of evidence/passage with no earlier punctuation boundary, OR
-      - is a bare, near-cap prefix of the evidence/passage that ends mid-word or lacks terminal punctuation.
-    """
+   
     if not ans:
         return False
 
@@ -264,7 +251,6 @@ def _is_prefix_clip_answer(ans: str, evidence: str, contexts: List[Dict[str, Any
             return True
     return False
 
-#llm plumbing
 
 @dataclass
 class GenConfig:

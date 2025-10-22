@@ -124,9 +124,7 @@ def _preview(s: str, n=80) -> str:
 #in-passage BM25 
 
 def _bm25_fit(docs):
-    """
-    docs: list[str] (windows/sentences). Returns idf and doc term stats.
-    """
+    
     token_docs = [ _key_tokens(d) for d in docs ]
     df = {}
     for doc in token_docs:
@@ -165,10 +163,7 @@ def _bm25_score(model, query_tokens, doc_tokens, k1=1.5, b=0.75):
 def _rank_inside_passage(passage: str, question: str, topn: int,
                          win_tok=50, stride=25, max_slices=60,
                          alpha=1.0, beta=1.0):
-    """
-    Combine simple token-overlap and in-passage BM25 to rank windows/sentences.
-    Returns list[str] of topn snippets.
-    """
+    
     snippets = _sentences_or_windows(passage, win_tok=win_tok, stride=stride, max_slices=max_slices)
     if not snippets:
         return []
@@ -191,10 +186,7 @@ def _rank_inside_passage(passage: str, question: str, topn: int,
 #support check 
 
 def _supported(span: str, evidence_text: str) -> bool:
-    """
-    Trust short spans only if they appear verbatim in evidence.
-    For longer spans, allow a Jaccard threshold.
-    """
+    
     if not span or not evidence_text:
         return False
     span_n = _norm(span)
