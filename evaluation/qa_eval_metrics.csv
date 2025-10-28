@@ -1,9 +1,7 @@
 entry,source_id,question_ix,ref_variant,reference,model_answer,model_found,notes,rouge1_p,rouge1_r,rouge1_f1,rougeL_f1,bertscore_p,bertscore_r,bertscore_f1
 1),6,0,ref,the number was significantly positively correlated,Significantly positively correlated,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.6302760243415833,0.4435597360134125,0.5360761880874634
-2),43,0,ref,"they feel socially embarrassed, and feel different",broncho pulmonary disease,True,bm25 got 331 as the most relevant passage,0.0,0.0,0.0,0.0,-0.39299073815345764,0.03813184052705765,-0.18525710701942444
-2),43,0,ref,broncho pulmonary disease is the major problem encountered,broncho pulmonary disease,True,bm25 got 331 as the most relevant passage,1.0,0.375,0.5454545454545454,0.5454545454545454,0.7843616604804993,0.4652547240257263,0.6208396553993225
+2),43,0,ref,broncho pulmonary disease is the major problem encountered,broncho pulmonary disease,True,,1.0,0.375,0.5454545454545454,0.5454545454545454,0.7843616604804993,0.4652547240257263,0.6208396553993225
 3),55,1,ref,"the three immunoglobulins: igg, iga and igm","normal levels of the three serum immunoglobulins igg, iga and igm",True,,0.6363636363636364,1.0,0.7777777777777778,0.7777777777777778,0.667273223400116,0.7757918238639832,0.7214674949645996
-3*),18,1,ref,"because cf patients have normal or elevated concentrations of immunoglobulins, but here the immunoglobulins",labile inhibitor,True,,0.0,0.0,0.0,0.0,-0.31868401169776917,-0.20104843378067017,-0.2585548162460327
 4),24,1,ref,the upstream resistances were high,upstream resistances,True,,1.0,0.4,0.5714285714285715,0.5714285714285715,0.7178002595901489,0.38686445355415344,0.5480713248252869
 5),8,1,ref,pseudomonas aeruginosa,Pseudomonas aeruginosa,True,,1.0,1.0,1.0,1.0,0.6145204305648804,0.9043157696723938,0.7561335563659668
 6),75,1,ref,it is directly related,directly related,True,,1.0,0.5,0.6666666666666666,0.6666666666666666,0.38369423151016235,0.1920914351940155,0.28729090094566345
