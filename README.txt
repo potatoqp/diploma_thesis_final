@@ -16,3 +16,6 @@ python scripts/salvage_unanswerable.py --in data/processed/cf_grounded_pruned.js
 
 python test_scripts/salvage_unanswerablev4.py --in data/processed/cf_grounded_pruned.jsonl --passages data/raw/cf_passages.csv --out data/final/cf_grounded_pruned_salvagedv4.jsonl --max_chars 140 --topn 4 --checkpoint 10
 
+python evaluation/evaluate_qas.py --human evaluation/my-evaluations.txt --model data/final/cf_grounded_pruned_salvagedv4.jsonl --out evaluation/qa_eval_metrics.csv
+
+streamlit run app/quiz_gen.py   
